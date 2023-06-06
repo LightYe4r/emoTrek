@@ -6,7 +6,7 @@ import serial
 import time
 import vlc
 
-ser=serial.Serial('com7',9600)
+#ser=serial.Serial('com7',9600)
 
 mp_face_mesh = mp.solutions.face_mesh
 
@@ -33,6 +33,14 @@ green= (0, 255, 0)
 red= (0, 0, 255)
 white= (255, 255, 255) 
 
+face_cascade_path = 'haarcascade_frontalface_default.xml'
+smile_cascade_path = 'haarcascade_smile.xml'
+
+face_cascade = cv.CascadeClassifier(face_cascade_path)
+smile_cascade = cv.CascadeClassifier(smile_cascade_path)
+
+smile_count = 0
+result = 0
 def player_generator(filename):
     instance = vlc.Instance()
 
@@ -92,6 +100,33 @@ with mp_face_mesh.FaceMesh(
 
         if results.multi_face_landmarks:
             
+            # 얼굴 감지
+            faces = face_cascade.detectMultiScale(rgb_frame, scaleFactor=1.2, minNeighbors=1, minSize=(50, 50))
+
+            # 각 얼굴에 대해 미소 감지 수행
+            for (x, y, w, h) in faces:
+                roi_gray = rgb_frame[y:y+h, x:x+w]
+                roi_color = frame[y:y+h, x:x+w]
+
+                # 미소 감지 수행
+                smiles = smile_cascade.detectMultiScale(roi_gray, scaleFactor=1.8, minNeighbors=22, minSize=(40, 40))
+
+                # 얼굴에 미소가 감지된 경우에만 사각형 표시
+                if len(smiles) > 0:
+                    for (sx, sy, sw, sh) in smiles:
+                        cv.rectangle(roi_color, (sx, sy), (sx+sw, sy+sh), (0, 255, 0), 2)
+                        smile_count+=2
+                        if(smile_count > 10):
+                            draw_text(frame,"check smile",100,140,red)
+                            smile_count = 0
+                            result += 1
+                        
+                else:
+                    smile_count -= 1
+                    if smile_count < 0:
+                        smile_count = 0
+                    #draw_text(frame,"check !smile",100,140,red)
+                    
             mesh_points=np.array([np.multiply([p.x, p.y], [img_w, img_h]).astype(int) 
             for p in results.multi_face_landmarks[0].landmark])
             
@@ -144,8 +179,8 @@ with mp_face_mesh.FaceMesh(
                 dest_y2 = 150    
 
             dest = str(int(dest_x)) +" " + str(int(dest_y)) +" "+ str(int(dest_y2))
-            print(dest, sumx, sumy)
-            ser.write(dest.encode('utf-8'))                         
+            #print(dest, sumx, sumy)
+            #ser.write(dest.encode('utf-8'))                         
 
         curr_time = time.time()
         time_passed = curr_time - start
@@ -204,7 +239,7 @@ with mp_face_mesh.FaceMesh(
         elif(time_passed >= 13 and start_flag):
             stayed_time = count/30
             stayed_time = round(stayed_time,3)
-            draw_text(frame,"you stayed " + str(stayed_time)+ " seconds",100,140,red)
+            draw_text(frame,"you stayed " + str(stayed_time)+ " seconds" + str(result) + "smiles",100,140,red)
         
             if(write_flag):
                 if(stayed_time >= 5):
